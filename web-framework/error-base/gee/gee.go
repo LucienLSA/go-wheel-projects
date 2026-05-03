@@ -34,6 +34,12 @@ func New() *Engine {
 	return engine
 }
 
+func Default() *Engine {
+	engine := New()
+	engine.Use(Logger(), Recovery())
+	return engine
+}
+
 // Use is defined to add middleware to the group
 func (group *RouterGroup) Use(middleware ...HandlerFunc) {
 	group.middlewares = append(group.middlewares, middleware...)
