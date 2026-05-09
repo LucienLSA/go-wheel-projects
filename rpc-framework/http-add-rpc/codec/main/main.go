@@ -4,7 +4,8 @@ import (
 	"context"
 	"log"
 	"net"
-	serverrpc "rpcframework/timeout-rpc"
+	"net/http"
+	serverrpc "rpcframework/http-add-rpc"
 
 	"sync"
 
@@ -26,19 +27,20 @@ func startServer(addr chan string) {
 		log.Fatal("register error:", err)
 	}
 	// pick a free port
-	l, err := net.Listen("tcp", ":0")
+	l, err := net.Listen("tcp", ":9999")
 	if err != nil {
 		log.Fatal("network error:", err)
 	}
+	serverrpc.HandleHTTP()
 	log.Println("start rpc server on", l.Addr())
 	addr <- l.Addr().String()
-	serverrpc.Accept(l)
+	_ = http.Serve(l, nil)
 }
-func main() {
-	log.SetFlags(0)
-	addr := make(chan string)
-	go startServer(addr)
-	client, _ := serverrpc.Dial("tcp", <-addr)
+func call(addrCh chan string) {
+	client, err := serverrpc.DialHTTP("tcp", <-addrCh)
+	if err != nil {
+		log.Fatal("dial http error:", err)
+	}
 	defer func() { _ = client.Close() }()
 
 	time.Sleep(time.Second)
@@ -50,12 +52,18 @@ func main() {
 			defer wg.Done()
 			args := &Args{Num1: i, Num2: i * i}
 			var reply int
-			ctx := context.Background()
-			if err := client.Call(ctx, "Foo.Sum", args, &reply); err != nil {
+			if err := client.Call(context.Background(), "Foo.Sum", args, &reply); err != nil {
 				log.Fatal("call Foo.Sum error:", err)
 			}
 			log.Printf("%d + %d = %d", args.Num1, args.Num2, reply)
 		}(i)
 	}
 	wg.Wait()
+}
+
+func main() {
+	log.SetFlags(0)
+	ch := make(chan string)
+	go call(ch)
+	startServer(ch)
 }
